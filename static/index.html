@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matriculaciones DGT — Motos</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #273449; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent2: #818cf8;
+    --good: #34d399; --warn: #fbbf24; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text);
+  }
+  header {
+    padding: 18px 28px; background: linear-gradient(90deg, #0b1220, #16233b);
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  .wrap { padding: 22px 28px; max-width: 1400px; margin: 0 auto; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; margin-bottom: 18px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  input, select {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: 14px; min-width: 150px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  button {
+    background: var(--accent); color: #062033; border: none; padding: 9px 18px;
+    border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .stat .num { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  tr:hover td { background: var(--panel2); }
+  .num-cell { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; border-radius: 4px; background: var(--accent); }
+  .bar-wrap { background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.ok { background: rgba(52,211,153,.15); color: var(--good); }
+  .badge.err { background: rgba(248,113,113,.15); color: var(--bad); }
+  .badge.warn { background: rgba(251,191,36,.15); color: var(--warn); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .chart-box { position: relative; height: 320px; }
+  .muted { color: var(--muted); }
+  .loading { display: none; text-align: center; padding: 30px; color: var(--accent); font-size: 15px; }
+  .error { color: var(--bad); padding: 10px; }
+  .chip { display: inline-block; background: var(--panel2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 12px; margin: 2px; }
+  .compare-input { display: flex; gap: 8px; margin-bottom: 10px; }
+  .scroll { max-height: 480px; overflow: auto; }
+  /* Multiselect con búsqueda */
+  .ms { position: relative; min-width: 200px; }
+  .ms-trigger {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: 14px; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 38px;
+  }
+  .ms-trigger .placeholder { color: var(--muted); }
+  .ms-trigger .count { background: var(--accent); color: #062033; border-radius: 20px; padding: 1px 8px; font-size: 12px; font-weight: 600; }
+  .ms-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    max-height: 280px; overflow: hidden; display: none; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+  .ms-dropdown.open { display: block; }
+  .ms-search {
+    width: 100%; border: none; border-bottom: 1px solid var(--border); border-radius: 0;
+    background: var(--panel2); color: var(--text); padding: 8px 10px; font-size: 13px;
+  }
+  .ms-search:focus { outline: none; border-color: var(--accent); }
+  .ms-list { max-height: 220px; overflow-y: auto; }
+  .ms-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 6px 10px; cursor: pointer; font-size: 13px;
+  }
+  .ms-item:hover { background: var(--panel); }
+  .ms-item.selected { background: rgba(56,189,248,.12); color: var(--accent); }
+  .ms-item .u { color: var(--muted); font-size: 11px; }
+  .ms-empty { padding: 10px; color: var(--muted); font-size: 13px; text-align: center; }
+  /* Top marcas horizontal + colapsables */
+  .tm-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+  .tm-tag {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 20px;
+    padding: 5px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0;
+  }
+  .tm-tag .u { color: var(--accent); font-weight: 600; }
+  .tm-tag .d { color: var(--muted); font-size: 11px; }
+  .chevron { transition: transform .2s; font-size: 14px; }
+  .chevron.collapsed { transform: rotate(-90deg); }
+  #tm-collapse, #cmp-collapse { display: none; }
+  #tm-collapse.open, #cmp-collapse.open { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏍️ Matriculaciones DGT</h1>
+  <span class="sub">Consulta de motos matriculadas · datos oficiales DGT</span>
+</header>
+
+<div class="wrap">
+  <!-- Filtros -->
+  <div class="card">
+    <h2>Consulta</h2>
+    <div class="filters">
+      <div class="field"><label>Desde (dd/mm/aaaa)</label><input type="text" id="start" placeholder="dd/mm/aaaa" maxlength="10"></div>
+      <div class="field"><label>Hasta (dd/mm/aaaa)</label><input type="text" id="end" placeholder="dd/mm/aaaa" maxlength="10"></div>
+      <div class="field"><label>Marcas</label>
+        <div class="ms" id="ms-marca">
+          <div class="ms-trigger"><span class="placeholder" id="marca-placeholder">Selecciona marcas…</span><span class="count" id="marca-count" style="display:none;"></span></div>
+          <div class="ms-dropdown">
+            <input class="ms-search" id="marca-search" placeholder="Buscar marca…">
+            <div class="ms-list" id="marca-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>Modelos</label>
+        <div class="ms" id="ms-modelo">
+          <div class="ms-trigger"><span class="placeholder" id="modelo-placeholder">Selecciona modelos…</span><span class="count" id="modelo-count" style="display:none;"></span></div>
+          <div class="ms-dropdown">
+            <input class="ms-search" id="modelo-search" placeholder="Buscar modelo…">
+            <div class="ms-list" id="modelo-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>Municipio</label><input type="text" id="municipio" placeholder="ej. MADRID"></div>
+      <div class="field"><label>Provincia</label><input type="text" id="provincia" placeholder="ej. B"></div>
+      <div class="field"><label>Cilindrada mín (cc)</label><input type="number" id="cc-min" placeholder="ej. 125" min="0"></div>
+      <div class="field"><label>Cilindrada máx (cc)</label><input type="number" id="cc-max" placeholder="ej. 500" min="0"></div>
+      <button id="btn-query">Consultar</button>
+    </div>
+    <div id="status-line" class="muted" style="margin-top:12px;font-size:13px;"></div>
+    <div id="error-box" class="error"></div>
+  </div>
+
+  <!-- Resumen -->
+  <div class="card" id="summary-card" style="display:none;">
+    <h2>Resumen</h2>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <!-- Gráfico mensual -->
+  <div class="card">
+    <h2>Ventas por mes</h2>
+    <div class="chart-box"><canvas id="chart-month"></canvas></div>
+  </div>
+
+  <!-- Top modelos -->
+  <div class="card">
+    <h2>Modelos más vendidos</h2>
+    <div class="scroll">
+      <table id="top-table">
+        <thead><tr><th>#</th><th>Marca</th><th>Modelo</th><th class="num-cell">Unidades</th><th class="num-cell">CC</th><th class="num-cell">Peso (kg)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Top marcas (colapsable) -->
+  <div class="card">
+    <h2 style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="tm-header">
+      Top marcas
+      <span class="chevron" id="tm-chevron">▾</span>
+    </h2>
+    <div id="tm-scroll" class="tm-scroll"></div>
+    <div id="tm-collapse">
+      <div class="scroll"><table id="marca-table"><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- Comparación de modelos (colapsable) -->
+  <div class="card">
+    <h2 style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" id="cmp-header">
+      Comparar modelos
+      <span class="chevron" id="cmp-chevron">▾</span>
+    </h2>
+    <div id="cmp-collapse">
+      <div class="compare-input">
+        <input type="text" id="compare-input" placeholder="Marca Modelo (ej. YAMAHA MT-07)" style="flex:1;">
+        <button class="secondary" id="btn-add-compare">Añadir</button>
+      </div>
+      <div id="compare-chips"></div>
+      <div class="chart-box" style="height:260px;"><canvas id="chart-compare"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let chartMonth = null, chartCompare = null;
+let compareModels = [];
+
+// ---- Conversión de fechas: dd/MM/yyyy (visualización) <-> YYYY-MM-DD (backend) ----
+function toISO(ddmmyyyy) {
+  // "dd/mm/aaaa" -> "aaaa-mm-dd"
+  const m = ddmmyyyy.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+function toDMY(iso) {
+  // "aaaa-mm-dd" -> "dd/mm/aaaa"
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+// Devuelve la fecha ISO válida del campo, o null si no es válida
+function getStartISO() { return toISO($('start').value); }
+function getEndISO() { return toISO($('end').value); }
+
+// Fechas por defecto: último mes disponible en local (o mes actual si no hay)
+async function defaultDates() {
+  try {
+    const res = await api('/api/months-available');
+    if (res.months.length) {
+      const last = res.months[res.months.length - 1];
+      const lastDay = new Date(last.year, last.month, 0).getDate();
+      $('start').value = `01/${String(last.month).padStart(2,'0')}/${last.year}`;
+      $('end').value = `${String(lastDay).padStart(2,'0')}/${String(last.month).padStart(2,'0')}/${last.year}`;
+      return;
+    }
+  } catch (e) {}
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  $('start').value = toDMY(first.toISOString().slice(0,10));
+  $('end').value = toDMY(last.toISOString().slice(0,10));
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(t || res.statusText);
+  }
+  return res.json();
+}
+
+function setStatus(msg, type) {
+  const el = $('status-line');
+  el.innerHTML = msg;
+  el.style.color = type === 'err' ? 'var(--bad)' : 'var(--muted)';
+}
+
+function showError(msg) {
+  $('error-box').textContent = msg;
+}
+
+// Formatea una fecha ISO (YYYY-MM-DD) a dd/MM/yyyy
+function fmtDate(iso) {
+  if (!iso) return '';
+  const p = iso.split('-');
+  return `${p[2]}/${p[1]}/${p[0]}`;
+}
+// Formatea un mes YYYY-MM a MM/yyyy
+function fmtMonth(ym) {
+  if (!ym) return '';
+  const p = ym.split('-');
+  return `${p[1]}/${p[0]}`;
+}
+
+async function ensureData() {
+  const start = getStartISO(), end = getEndISO();
+  if (!start || !end) { showError('Formato de fecha inválido. Usa dd/mm/aaaa.'); return null; }
+  showError('');
+  setStatus('Comprobando ficheros locales…');
+  const res = await api(`/api/ensure?start=${start}&end=${end}`, { method: 'POST' });
+  const missing = res.months.filter(m => !m.ok);
+  const downloaded = res.months.filter(m => m.ok);
+  if (missing.length) {
+    setStatus(`⚠️ No se pudieron descargar: ${missing.map(m=>m.ym).join(', ')}`, 'err');
+  } else {
+    setStatus(`✅ Ficheros listos (${downloaded.length} meses).`);
+  }
+  return res;
+}
+
+async function runQuery() {
+  const start = getStartISO(), end = getEndISO();
+  if (!start || !end) { showError('Formato de fecha inválido. Usa dd/mm/aaaa.'); return; }
+  showError('');
+  setStatus('Comprobando y descargando ficheros necesarios…');
+  // 1) Asegurar que los zips del rango estén en local (descarga los que falten)
+  try {
+    await ensureData();
+  } catch (e) {
+    showError('Error al preparar los datos: ' + e.message);
+    return;
+  }
+  setStatus('Cargando datos…');
+  const payload = {
+    start, end,
+    marcas: msMarca.selected.length ? msMarca.selected : null,
+    modelos: msModelo.selected.length ? msModelo.selected : null,
+    municipio: $('municipio').value, provincia: $('provincia').value,
+    cc_min: $('cc-min').value ? parseInt($('cc-min').value) : null,
+    cc_max: $('cc-max').value ? parseInt($('cc-max').value) : null
+  };
+  try {
+    const data = await api('/api/query', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    renderSummary(data);
+    renderMonthChart(data);
+    renderTopMarcas(data);
+    renderTopTable(data);
+    renderCompare(data);
+    setStatus(`✅ ${data.total.toLocaleString('es-ES')} motos en el rango.`);
+  } catch (e) {
+    showError('Error: ' + e.message);
+  }
+}
+
+function renderSummary(data) {
+  $('summary-card').style.display = 'block';
+  const months = Object.keys(data.per_month).length;
+  const avg = months ? Math.round(data.total / months) : 0;
+  $('stats').innerHTML = `
+    <div class="stat"><div class="num">${data.total.toLocaleString('es-ES')}</div><div class="lbl">Motos totales</div></div>
+    <div class="stat"><div class="num">${months}</div><div class="lbl">Meses</div></div>
+    <div class="stat"><div class="num">${avg.toLocaleString('es-ES')}</div><div class="lbl">Media / mes</div></div>
+    <div class="stat"><div class="num">${data.top_models.length ? data.top_models[0].marca + ' ' + data.top_models[0].modelo : '—'}</div><div class="lbl">Más vendido</div></div>
+    <div class="stat"><div class="num" style="font-size:16px;">${fmtDate(data.range.start)} — ${fmtDate(data.range.end)}</div><div class="lbl">Rango consultado</div></div>
+  `;
+}
+
+function renderMonthChart(data) {
+  const labels = Object.keys(data.per_month).sort().map(fmtMonth);
+  const values = labels.map((l, i) => data.per_month[Object.keys(data.per_month).sort()[i]]);
+  if (chartMonth) chartMonth.destroy();
+  chartMonth = new Chart($('chart-month'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Motos', data: values, backgroundColor: 'rgba(56,189,248,.7)', borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
+  });
+}
+
+function renderTopMarcas(data) {
+  // Tags horizontales con scroll lateral
+  $('tm-scroll').innerHTML = data.top_marcas.map(m => {
+    const d = m.diff_pct === 0 ? '' : ` <span class="d">(${m.diff_pct > 0 ? '+' : ''}${m.diff_pct}%)</span>`;
+    return `<span class="tm-tag">${m.marca} <span class="u">[${m.unidades.toLocaleString('es-ES')}</span>${d}]</span>`;
+  }).join('') || '<span class="muted">Sin datos</span>';
+  // Tabla colapsable
+  $('marca-table').querySelector('tbody').innerHTML = data.top_marcas.map((m, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${m.marca}</td>
+      <td class="num-cell">${m.unidades.toLocaleString('es-ES')}</td>
+      <td class="num-cell">${m.diff_pct === 0 ? '—' : (m.diff_pct > 0 ? '+' : '') + m.diff_pct + '%'}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="muted">Sin datos</td></tr>';
+}
+
+function renderTopTable(data) {
+  const tbody = $('top-table').querySelector('tbody');
+  tbody.innerHTML = data.top_models.map((m, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${m.marca}</td>
+      <td>${m.modelo}</td>
+      <td class="num-cell">${m.unidades.toLocaleString('es-ES')}</td>
+      <td class="num-cell">${m.cc ? m.cc : '—'}</td>
+      <td class="num-cell">${m.peso ? m.peso : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">Sin resultados</td></tr>';
+}
+
+// ---- Comparación de modelos ----
+function addCompare() {
+  const v = $('compare-input').value.trim();
+  if (!v) return;
+  compareModels.push(v);
+  $('compare-input').value = '';
+  renderCompareChips();
+  runQuery();
+}
+function removeCompare(i) {
+  compareModels.splice(i, 1);
+  renderCompareChips();
+  runQuery();
+}
+function renderCompareChips() {
+  $('compare-chips').innerHTML = compareModels.map((m,i) =>
+    `<span class="chip">${m} <a href="#" onclick="removeCompare(${i});return false;" style="color:var(--bad)">✕</a></span>`).join('');
+}
+function renderCompare(data) {
+  if (!compareModels.length) {
+    if (chartCompare) { chartCompare.destroy(); chartCompare = null; }
+    return;
+  }
+  const monthKeys = Object.keys(data.per_month).sort();
+  const labels = monthKeys.map(fmtMonth);
+  const datasets = compareModels.map((q, i) => {
+    const parts = q.split(/\s+/);
+    const marca = parts[0], modelo = parts.slice(1).join(' ');
+    const counts = {};
+    // Recalcular por mes para este modelo concreto
+    // (usamos los datos ya filtrados por marca/modelo global; para comparación
+    //  consultamos de nuevo al backend por cada modelo)
+    return { label: q, data: [], borderColor: palette(i), backgroundColor: palette(i), tension: .3 };
+  });
+  // Consulta por cada modelo comparado
+  Promise.all(compareModels.map(q => {
+    const parts = q.split(/\s+/);
+    return api('/api/query', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ start: getStartISO(), end: getEndISO(), marcas: [parts[0]], modelos: [parts.slice(1).join(' ')] }) });
+  })).then(results => {
+    results.forEach((r, i) => {
+      datasets[i].data = monthKeys.map(l => r.per_month[l] || 0);
+    });
+    if (chartCompare) chartCompare.destroy();
+    chartCompare = new Chart($('chart-compare'), {
+      type: 'line',
+      data: { labels, datasets },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#e2e8f0' } } },
+        scales: { y: { beginAtZero: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                  x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
+    });
+  });
+}
+function palette(i) {
+  const colors = ['#38bdf8','#f87171','#34d399','#fbbf24','#a78bfa','#fb7185','#22d3ee','#f472b6'];
+  return colors[i % colors.length];
+}
+
+// ===================== Multiselect con búsqueda =====================
+function makeMultiSelect(id, opts) {
+  const root = $(id);
+  const trigger = root.querySelector('.ms-trigger');
+  const dropdown = root.querySelector('.ms-dropdown');
+  const search = root.querySelector('.ms-search');
+  const list = root.querySelector('.ms-list');
+  const placeholder = root.querySelector('.placeholder');
+  const countEl = root.querySelector('.count');
+  const state = { selected: [], items: [], search: '' };
+
+  function render() {
+    const q = state.search.toUpperCase();
+    const filtered = state.items.filter(it => it.label.toUpperCase().includes(q));
+    if (!filtered.length) {
+      list.innerHTML = '<div class="ms-empty">Sin resultados</div>';
+    } else {
+      list.innerHTML = filtered.map(it => {
+        const sel = state.selected.includes(it.value) ? 'selected' : '';
+        return `<div class="ms-item ${sel}" data-value="${it.value}">
+          <span>${it.label}</span><span class="u">${it.unidades}</span></div>`;
+      }).join('');
+    }
+    // Actualizar trigger
+    if (state.selected.length) {
+      placeholder.textContent = state.selected.length === 1 ? state.selected[0] : `${state.selected.length} seleccionados`;
+      placeholder.classList.remove('placeholder');
+      countEl.style.display = '';
+      countEl.textContent = state.selected.length;
+    } else {
+      placeholder.textContent = opts.placeholder;
+      placeholder.classList.add('placeholder');
+      countEl.style.display = 'none';
+    }
+  }
+
+  function toggleItem(value) {
+    const idx = state.selected.indexOf(value);
+    if (idx >= 0) state.selected.splice(idx, 1);
+    else state.selected.push(value);
+    render();
+    if (opts.onChange) opts.onChange(state.selected);
+  }
+
+  trigger.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = dropdown.classList.contains('open');
+    closeAllDropdowns();
+    if (!isOpen) {
+      dropdown.classList.add('open');
+      search.value = '';
+      state.search = '';
+      render();
+      search.focus();
+    }
+  });
+  search.addEventListener('input', () => { state.search = search.value; render(); });
+  search.addEventListener('click', e => e.stopPropagation());
+  list.addEventListener('click', e => {
+    const item = e.target.closest('.ms-item');
+    if (item) toggleItem(item.dataset.value);
+  });
+  dropdown.addEventListener('click', e => e.stopPropagation());
+
+  state.setItems = items => { state.items = items; render(); };
+  state.setSelected = sel => { state.selected = sel.slice(); render(); };
+  return state;
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
+}
+document.addEventListener('click', closeAllDropdowns);
+
+// Instancias
+const msMarca = makeMultiSelect('ms-marca', {
+  placeholder: 'Selecciona marcas…',
+  onChange: sel => { loadModelos(); runQuery(); }
+});
+const msModelo = makeMultiSelect('ms-modelo', {
+  placeholder: 'Selecciona modelos…',
+  onChange: () => runQuery()
+});
+
+// Cargar marcas disponibles (según rango de fechas)
+async function loadMarcas() {
+  const start = getStartISO(), end = getEndISO();
+  if (!start || !end) return;
+  try {
+    const res = await api(`/api/facets?start=${start}&end=${end}`);
+    msMarca.setItems(res.marcas.map(m => ({ value: m.marca, label: m.marca, unidades: m.unidades.toLocaleString('es-ES') })));
+  } catch (e) {}
+}
+
+// Cargar modelos de las marcas seleccionadas
+async function loadModelos() {
+  const start = getStartISO(), end = getEndISO();
+  const sel = msMarca.selected;
+  if (!sel.length) {
+    msModelo.setItems([]);
+    msModelo.setSelected([]);
+    return;
+  }
+  try {
+    const res = await api(`/api/facets?start=${start}&end=${end}&marca=${encodeURIComponent(sel[0])}`);
+    msModelo.setItems(res.modelos.map(m => ({ value: m.modelo, label: m.modelo, unidades: m.unidades.toLocaleString('es-ES') })));
+  } catch (e) {}
+}
+
+// Reinicia la selección de marcas y modelos al cambiar las fechas
+function resetFilters() {
+  msMarca.setSelected([]);
+  msModelo.setSelected([]);
+  msModelo.setItems([]);
+  loadMarcas();
+}
+
+$('btn-query').addEventListener('click', runQuery);
+$('btn-add-compare').addEventListener('click', addCompare);
+$('compare-input').addEventListener('keydown', e => { if (e.key === 'Enter') addCompare(); });
+
+// Al cambiar las fechas, reiniciar selección de marcas/modelos
+$('start').addEventListener('change', resetFilters);
+$('end').addEventListener('change', resetFilters);
+
+// ---- Máscara de entrada dd/mm/aaaa ----
+function maskDate(el) {
+  let v = el.value.replace(/[^\d]/g, '').slice(0, 8);
+  let out = '';
+  if (v.length > 2) out += v.slice(0,2) + '/';
+  else { out += v; el.value = out; return; }
+  if (v.length > 4) out += v.slice(2,4) + '/';
+  else { out += v.slice(2); el.value = out; return; }
+  out += v.slice(4);
+  el.value = out;
+}
+$('start').addEventListener('input', e => maskDate(e.target));
+$('end').addEventListener('input', e => maskDate(e.target));
+
+// ---- Secciones colapsables ----
+function toggleCollapse(headerId, collapseId, chevronId) {
+  const collapse = $(collapseId);
+  const chevron = $(chevronId);
+  const isOpen = collapse.classList.contains('open');
+  if (isOpen) {
+    collapse.classList.remove('open');
+    chevron.classList.add('collapsed');
+  } else {
+    collapse.classList.add('open');
+    chevron.classList.remove('collapsed');
+  }
+}
+$('tm-header').addEventListener('click', () => toggleCollapse('tm-header', 'tm-collapse', 'tm-chevron'));
+$('cmp-header').addEventListener('click', () => toggleCollapse('cmp-header', 'cmp-collapse', 'cmp-chevron'));
+
+defaultDates().then(() => { loadMarcas(); runQuery(); });
+</script>
+</body>
+</html>

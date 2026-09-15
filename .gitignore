@@ -1,0 +1,25 @@
+# Datos descargados de la DGT (se regeneran automáticamente)
+data/zips/
+data/*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Entorno / IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Caché y logs
+.cache/
+*.log
