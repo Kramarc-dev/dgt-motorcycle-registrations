@@ -535,7 +535,7 @@ async function loadMarcas() {
   } catch (e) {}
 }
 
-// Cargar modelos de las marcas seleccionadas
+// Cargar modelos de las marcas seleccionadas (combina todas las marcas)
 async function loadModelos() {
   const start = getStartISO(), end = getEndISO();
   const sel = msMarca.selected;
@@ -545,8 +545,22 @@ async function loadModelos() {
     return;
   }
   try {
-    const res = await api(`/api/facets?start=${start}&end=${end}&marca=${encodeURIComponent(sel[0])}`);
-    msModelo.setItems(res.modelos.map(m => ({ value: m.modelo, label: m.modelo, unidades: m.unidades.toLocaleString('es-ES') })));
+    // Consultar los modelos de cada marca seleccionada en paralelo
+    const results = await Promise.all(sel.map(marca =>
+      api(`/api/facets?start=${start}&end=${end}&marca=${encodeURIComponent(marca)}`)
+    ));
+    // Combinar modelos de todas las marcas (sin duplicados)
+    const seen = new Set();
+    const items = [];
+    results.forEach(res => {
+      res.modelos.forEach(m => {
+        if (!seen.has(m.modelo)) {
+          seen.add(m.modelo);
+          items.push({ value: m.modelo, label: m.modelo, unidades: m.unidades.toLocaleString('es-ES') });
+        }
+      });
+    });
+    msModelo.setItems(items);
   } catch (e) {}
 }
 
